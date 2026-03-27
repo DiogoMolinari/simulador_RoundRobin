@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>Simulador Round Robin</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #e8f0fe;
+      color: #1a237e;
+      margin: 0;
+      padding: 30px 40px;
+      min-height: 100vh;
+      box-sizing: border-box;
+    }
+
+    h1 {
+      color: #0d47a1;
+      margin-bottom: 20px;
+      text-align: center;
+      text-shadow: 0 0 5px #82b1ff;
+    }
+
+    #cpu,
+    #fila,
+    #terminados {
+      margin-top: 12px;
+      font-weight: 600;
+      font-size: 1.1rem;
+    }
+
+    #gantt {
+      margin-top: 25px;
+      border: 2px solid #82b1ff;
+      min-height: 50px;
+      display: flex;
+      align-items: center;
+      background: #e8f0fe;
+      border-radius: 8px;
+      box-shadow: 0 0 12px #82b1ffaa;
+      overflow-x: auto;
+      padding: 5px;
+    }
+
+    .bloco {
+      height: 40px;
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 14px;
+      border-right: 1px solid #fff;
+      white-space: nowrap;
+      user-select: none;
+      border-radius: 3px;
+      margin-right: 2px;
+      flex-shrink: 0;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+      transition: transform 0.2s;
+    }
+
+    .bloco:hover {
+      transform: scale(1.05);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      cursor: default;
+    }
+
+    button {
+      margin-top: 30px;
+      margin-right: 12px;
+      padding: 12px 28px;
+      font-size: 16px;
+      font-weight: 600;
+      color: #fff;
+      background: linear-gradient(135deg, #0d47a1, #1976d2);
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      box-shadow: 0 4px 8px #82b1ffcc;
+      transition: background 0.3s ease;
+      user-select: none;
+    }
+
+    button:disabled {
+      background: #90caf9aa;
+      cursor: not-allowed;
+      box-shadow: none;
+      color: #e3f2fdcc;
+    }
+
+    button:hover:not(:disabled) {
+      background: linear-gradient(135deg, #1976d2, #0d47a1);
+    }
+
+    @media (max-width: 600px) {
+      body {
+        padding: 20px 15px;
+      }
+
+      button {
+        width: 100%;
+        margin-bottom: 12px;
+        margin-right: 0;
+      }
+
+      #gantt {
+        min-height: 60px;
+      }
+
+      .bloco {
+        font-size: 12px;
+        height: 35px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <h1>Simulador Round Robin com Gráfico Gantt</h1>
+
+  <div><strong>Quantum:</strong> <span id="quantum">10 ms</span></div>
+
+  <div id="cpu"><strong>CPU:</strong> Vazia</div>
+  <div id="fila"><strong>Fila de Pronto:</strong> P1, P2, P3</div>
+  <div id="terminados"><strong>Processos Terminados:</strong> Nenhum</div>
+
+  <div id="gantt" aria-label="Gráfico Gantt"></div>
+
+  <button id="startBtn" onclick="iniciarSimulacao()">Iniciar Simulação</button>
+  <button id="resetBtn" onclick="reiniciarSimulacao()" disabled>Reiniciar</button>
+
+  <script>
+    const quantum = 10;
+
+    const processosOriginais = [
+      { id: "P1", tempoRestante: 25, ciclos: 0, cor: "#1976d2" },
+      { id: "P2", tempoRestante: 15, ciclos: 0, cor: "#64b5f6" },
+      { id: "P3", tempoRestante: 5, ciclos: 0, cor: "#0d47a1" }
+    ];
+
+    let processos = [];
+    let filaPronto = [];
+    let terminados = [];
+    let gantt = [];
+
+    const cpuDiv = document.getElementById("cpu");
+    const filaDiv = document.getElementById("fila");
+    const terminadosDiv = document.getElementById("terminados");
+    const ganttDiv = document.getElementById("gantt");
+    const startBtn = document.getElementById("startBtn");
+    const resetBtn = document.getElementById("resetBtn");
+
+    function atualizarTela(cpu, fila, terminados) {
+      cpuDiv.innerHTML = `<strong>CPU:</strong> ${cpu ? cpu.id + " (restante: " + cpu.tempoRestante + "ms)" : "Vazia"}`;
+      filaDiv.innerHTML = `<strong>Fila de Pronto:</strong> ${fila.length > 0 ? fila.map(p => p.id + " (" + p.tempoRestante + "ms)").join(", ") : "Vazia"}`;
+      terminadosDiv.innerHTML = `<strong>Processos Terminados:</strong> ${terminados.length > 0 ? terminados.map(p => `${p.id}: ${p.ciclos} ciclo(s)`).join(" | ") : "Nenhum"}`;
+    }
+
+    function atualizarGantt() {
+      ganttDiv.innerHTML = "";
+      gantt.forEach(registro => {
+        const bloco = document.createElement("div");
+        bloco.className = "bloco";
+        bloco.style.backgroundColor = registro.cor;
+        bloco.style.width = registro.tempo * 15 + "px";
+        bloco.textContent = registro.id + " (" + registro.tempo + "ms)";
+        ganttDiv.appendChild(bloco);
+      });
+    }
+
+    async function iniciarSimulacao() {
+      startBtn.disabled = true;
+      resetBtn.disabled = true;
+      gantt.length = 0;
+
+      processos = processosOriginais.map(p => ({ ...p }));
+      filaPronto = [...processos];
+      terminados = [];
+
+      atualizarTela(null, filaPronto, terminados);
+      atualizarGantt();
+
+      while (filaPronto.length > 0) {
+        let processo = filaPronto.shift();
+
+        atualizarTela(processo, filaPronto, terminados);
+        await new Promise(resolve => setTimeout(resolve, 700));
+
+        let tempoExecutado = Math.min(quantum, processo.tempoRestante);
+        processo.tempoRestante -= tempoExecutado;
+        processo.ciclos++;
+
+        gantt.push({
+          id: processo.id,
+          tempo: tempoExecutado,
+          cor: processo.cor
+        });
+        atualizarGantt();
+
+        await new Promise(resolve => setTimeout(resolve, 700));
+
+        if (processo.tempoRestante > 0) {
+          filaPronto.push(processo);
+        } else {
+          terminados.push(processo);
+        }
+
+        atualizarTela(null, filaPronto, terminados);
+      }
+
+      alert("✅ Todos os processos foram executados!");
+      resetBtn.disabled = false;
+    }
+
+    function reiniciarSimulacao() {
+      gantt = [];
+      processos = processosOriginais.map(p => ({ ...p }));
+      filaPronto = [...processos];
+      terminados = [];
+
+      atualizarTela(null, filaPronto, terminados);
+      atualizarGantt();
+
+      startBtn.disabled = false;
+      resetBtn.disabled = true;
+    }
+
+    reiniciarSimulacao();
+  </script>
+
+</body>
+
+</html>
